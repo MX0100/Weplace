@@ -104,7 +104,7 @@ def home():
     # 分页
     page = request.args.get('page', 1, type=int)
     per_page = 6  # 每页显示的条数
-    pagination = Content.query.order_by(Content.id.desc()).paginate(page, per_page, False)
+    pagination = Content.query.order_by(Content.id.desc()).paginate(page=page, per_page=per_page, error_out=False)
     contents = pagination.items
     has_next = pagination.has_next
     has_prev = pagination.has_prev  # 添加上一页的检查
