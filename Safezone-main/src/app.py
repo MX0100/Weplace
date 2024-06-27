@@ -1,3 +1,5 @@
+import sys
+
 from flask import Flask, render_template, redirect, url_for, flash, session, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
@@ -5,7 +7,8 @@ from flask_socketio import SocketIO, emit
 from datetime import datetime, timedelta
 import os
 import socket
-from models import db, User, Content, UserSession  # 修改导入
+sys.path.append('../..')
+from models import db, User, Content, UserSession
 
 from interceptor import login_required
 
