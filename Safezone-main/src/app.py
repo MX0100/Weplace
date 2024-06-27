@@ -7,17 +7,24 @@ import os
 import socket
 from interceptor import login_required
 
+# 实例化 SQLAlchemy
+db = SQLAlchemy()
+
+# 实例化 Flask 应用
 app = Flask(__name__)
 app.config.from_object('config.Config')
 
-db = SQLAlchemy(app)
+# 初始化应用
 db.init_app(app)
 Session(app)
 socketio = SocketIO(app)
 
-# 导入表单和模型
-from forms import LoginForm, RegistrationForm, ContentForm
-from models import User, Content, UserSession
+# 延迟导入表单和模型
+def import_forms_and_models():
+    global LoginForm, RegistrationForm, ContentForm, User, Content, UserSession
+    from forms import LoginForm, RegistrationForm, ContentForm
+    from models import User, Content, UserSession
+    from interceptor import login_required
 
 @app.before_request
 def create_tables():
@@ -46,6 +53,7 @@ def validate_session():
 @app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    import_forms_and_models()
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
@@ -69,6 +77,7 @@ def login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    import_forms_and_models()
     form = RegistrationForm()
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
@@ -85,6 +94,7 @@ def register():
 @app.route('/home', methods=['GET', 'POST'])
 @login_required
 def home():
+    import_forms_and_models()
     if not validate_session():
         flash('Session has expired. Please log in again.', 'danger')
         return redirect(url_for('login'))
@@ -110,6 +120,7 @@ def home():
 @app.route('/delete_content/<int:content_id>', methods=['DELETE'])
 @login_required
 def delete_content(content_id):
+    import_forms_and_models()
     content = Content.query.get_or_404(content_id)
     try:
         content = db.session.merge(content)  # 确保对象在当前会话中
@@ -125,6 +136,7 @@ def delete_content(content_id):
 @app.route('/logout')
 @login_required
 def logout():
+    import_forms_and_models()
     if 'session_token' in session:
         session_token = UserSession.query.filter_by(session_token=session['session_token']).first()
         if session_token:
@@ -136,10 +148,10 @@ def logout():
     flash('You have been logged out.', 'success')
     return redirect(url_for('login'))
 
-
 @app.route('/api_logout', methods=['POST'])
 @login_required
 def api_logout():
+    import_forms_and_models()
     if 'session_token' in session:
         session_token = UserSession.query.filter_by(session_token=session['session_token']).first()
         if session_token:
@@ -160,6 +172,7 @@ def handle_disconnect():
     print('Client disconnected:', request.sid)
 
 if __name__ == '__main__':
+    import_forms_and_models()
     # 获取本机IP地址
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
