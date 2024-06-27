@@ -7,7 +7,7 @@ from flask_socketio import SocketIO, emit
 from datetime import datetime, timedelta
 import os
 import socket
-sys.path.append('../..')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from models import db, User, Content, UserSession
 
 from interceptor import login_required
