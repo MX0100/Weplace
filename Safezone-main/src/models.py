@@ -1,17 +1,20 @@
-from datetime import datetime, timedelta
 import uuid
+from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
+
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
 
+
 class Content(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.Text, nullable=False)
+
 
 class UserSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
