@@ -1,3 +1,5 @@
+import sys
+
 from flask import Flask, render_template, redirect, url_for, flash, session, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
@@ -5,23 +7,25 @@ from flask_socketio import SocketIO, emit
 from datetime import datetime, timedelta
 import os
 import socket
+sys.path.append('../..')
+from models import db, User, Content, UserSession
+
 from interceptor import login_required
 
 app = Flask(__name__)
 app.config.from_object('config.Config')
 
-db = SQLAlchemy(app)
-db.init_app(app)
+db.init_app(app)  # 初始化db
 Session(app)
 socketio = SocketIO(app)
 
 # 导入表单和模型
 from forms import LoginForm, RegistrationForm, ContentForm
-from models import User, Content, UserSession
 
 @app.before_request
 def create_tables():
-    db.create_all()
+    with app.app_context():
+        db.create_all()
 
 def validate_session():
     session_token = session.get('session_token') or request.args.get('session_token')
