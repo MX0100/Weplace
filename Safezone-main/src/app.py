@@ -19,7 +19,7 @@ socketio = SocketIO(app)
 # 导入表单和模型
 from forms import LoginForm, RegistrationForm, ContentForm
 
-@app.before_first_request
+@app.before_request
 def create_tables():
     with app.app_context():
         db.create_all()
