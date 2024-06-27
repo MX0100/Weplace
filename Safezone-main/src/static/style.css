@@ -1,0 +1,17 @@
+.history-card {
+    height: calc((100vh - 56px) / 6); /* 减去顶部导航条的高度 */
+}
+
+.main-textbox .form-control {
+    height: 200px;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+.navbar-text {
+    margin-right: 20px;
+}
+
+/* 添加更多自定义样式 */

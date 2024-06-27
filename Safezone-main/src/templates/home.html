@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{% block title %}Home{% endblock %}</title>
+    <!-- 引入Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <style>
+        /* 设置历史记录卡片的高度，减去顶部导航条的高度 */
+        .history-card {
+            height: calc((100vh - 56px) / 6); /* 减去顶部导航条的高度 */
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <a class="navbar-brand" href="#">Flask App</a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav ml-auto">
+                {% if 'username' in session and request.path not in ['/login', '/register'] %}
+                    <li class="nav-item">
+                        <span class="navbar-text">Logged in as {{ session['username'] }}</span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+                    </li>
+                {% elif request.path not in ['/login', '/register'] %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('register') }}">Register</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
+    <!-- 主内容容器 -->
+    <div class="container mt-4">
+        <!-- 显示闪现消息 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <!-- 内容块 -->
+        {% block content %}
+        <div class="container" style="height: 100vh;">
+            <div class="row h-100">
+                <!-- 左侧文本框 -->
+                <div class="col-md-6 d-flex align-items-center">
+                    <div class="card w-100 main-textbox">
+                        <div class="card-header">Main Textbox</div>
+                        <div class="card-body">
+                            <!-- 表单，用于提交新内容 -->
+                            <form id="contentForm" method="POST" action="{{ url_for('home') }}">
+                                {{ form.hidden_tag() }}
+                                <div class="form-group">
+                                    {{ form.text.label(class="form-label") }}
+                                    {{ form.text(class="form-control", id="contentTextarea", rows=10) }}
+                                </div>
+                                <div class="form-group">
+                                    {{ form.submit(class="btn btn-primary btn-block") }}
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧历史信息 -->
+                <div class="col-md-6 d-flex flex-column overflow-auto" style="height: 100vh;" id="contentList">
+                    {% for content in contents %}
+                        <!-- 历史记录卡片 -->
+                        <div class="card mb-2 flex-grow-1 history-card" id="content-{{ content.id }}">
+                            <div class="card-body d-flex justify-content-between">
+                                <p class="card-text">{{ content.text[:100] }}...</p> <!-- 显示前100个字符 -->
+                                <button class="btn btn-danger btn-sm" onclick="deleteContent({{ content.id }})">删除</button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    <!-- 分页链接 -->
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            {% if has_prev %}
+                                <li class="page-item"><a class="page-link" href="{{ url_for('home', page=page-1, session_token=session.get('session_token')) }}">Previous</a></li>
+                            {% endif %}
+                            {% if has_next %}
+                                <li class="page-item"><a class="page-link" href="{{ url_for('home', page=page+1, session_token=session.get('session_token')) }}">Next</a></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+        {% endblock %}
+    </div>
+    <!-- 模态框，用于显示完整的历史记录内容 -->
+    <div class="modal fade" id="contentModal" tabindex="-1" role="dialog" aria-labelledby="contentModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="contentModalLabel">Content Details</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p id="modalContent"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入 SocketIO 客户端库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <!-- JavaScript to handle modal content, deletion and real-time updates -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const socket = io();
+
+            socket.on('connect', function() {
+                console.log('Connected to server');
+            });
+
+            socket.on('new_content', function(data) {
+                console.log('New content received:', data);
+                const contentList = document.getElementById('contentList');
+                const newContent = document.createElement('div');
+                newContent.className = 'card mb-2 flex-grow-1 history-card';
+                newContent.id = `content-${data.id}`;
+                newContent.innerHTML = `
+                    <div class="card-body d-flex justify-content-between">
+                        <p class="card-text">${data.text.slice(0, 100)}...</p>
+                        <button class="btn btn-danger btn-sm" onclick="deleteContent(${data.id})">删除</button>
+                    </div>
+                `;
+                contentList.prepend(newContent); // 将新内容插入到列表顶部
+            });
+
+            $('#contentModal').on('show.bs.modal', function (event) {
+                var button = $(event.relatedTarget);
+                var content = button.data('content');
+                var modal = $(this);
+                modal.find('.modal-body #modalContent').text(content);
+            });
+
+            // 确保分页按钮不触发注销请求
+            document.querySelectorAll('.pagination .page-link').forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    window.location.href = this.href;
+                });
+            });
+
+            // 确保注销按钮只触发注销请求
+            document.getElementById('logout-form').addEventListener('submit', function(event) {
+                event.preventDefault();
+                fetch(this.action, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (response.status === 204) {
+                        window.location.href = '/login';
+                    } else {
+                        alert('Logout failed.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            });
+
+            // 检测页面关闭事件
+            window.addEventListener('beforeunload', function (e) {
+                var currentOrigin = window.location.origin;
+                var newOrigin = document.activeElement && document.activeElement.href ? new URL(document.activeElement.href).origin : null;
+
+                if (!newOrigin || currentOrigin !== newOrigin) {
+                    navigator.sendBeacon('/api/logout');
+                }
+            });
+
+            // 监听textarea的回车事件
+            document.getElementById('contentTextarea').addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    document.getElementById('contentForm').submit();
+                }
+            });
+        });
+
+        function deleteContent(contentId) {
+            console.log(`Attempting to delete content with ID: ${contentId}`);
+            fetch(`/delete_content/${contentId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.status === 200) {
+                    console.log(`Content with ID ${contentId} deleted successfully.`);
+                    document.getElementById(`content-${contentId}`).remove();
+                } else {
+                    console.log(`Failed to delete content with ID ${contentId}.`);
+                    alert('Failed to delete content.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>
