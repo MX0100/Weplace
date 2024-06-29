@@ -119,8 +119,9 @@ def delete_content(content_id):
         content = db.session.merge(content)  # 确保对象在当前会话中
         db.session.delete(content)
         db.session.commit()
-        socketio.emit('delete_content', {'id': content_id})
-        return jsonify({'result': 'success'}), 200
+        socketio.emit('delete_content', {'id': content_id}, namespace='/')
+        print(f"Broadcasting delete_content event for content ID {content_id}")
+        return jsonify({'message': 'Content deleted successfully'}), 200
     except Exception as e:
         db.session.rollback()
         print(f"Error deleting content: {e}")
@@ -159,6 +160,23 @@ def api_logout():
 def handle_connect():
     print('Client connected:', request.sid)
 
+@socketio.on('delete_content')
+def handle_delete_content(content_id):
+    try:
+        # 可以添加权限验证等逻辑
+        content = Content.query.get(content_id)
+        if content:
+            db.session.delete(content)
+            db.session.commit()
+            print(f"Content deleted: {content_id}")
+            # 发送广播事件告知所有客户端删除了哪个内容
+            emit('delete_content', {'id': content_id}, broadcast=True)
+        else:
+            print(f"Content with ID {content_id} not found.")
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting content: {e}")
+        emit('delete_content_failed', {'error': str(e)})  # 发送删除失败的事件给客户端
 @socketio.on('disconnect')
 def handle_disconnect():
     print('Client disconnected:', request.sid)
