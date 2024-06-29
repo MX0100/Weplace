@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -178,7 +179,6 @@
                     console.error('Error:', error);
                 });
             });
-
             // 检测页面关闭事件
             window.addEventListener('beforeunload', function (e) {
                 var currentOrigin = window.location.origin;
@@ -219,6 +219,51 @@
                 console.error('Error:', error);
             });
         }
+        var socket = io();
+        socket.on('connect', function () {
+            console.log('Connected to server');
+        });
+        socket.on('delete_content', function(data) {
+            console.log(`Deleting content with ID ${data.id}`);
+            var deletedContentId = data.id;
+            var deletedElement = document.getElementById(`content-${deletedContentId}`);
+            if (deletedElement) {
+                deletedElement.remove();
+                console.log(`Element with ID content-${deletedContentId} deleted successfully.`);
+            } else {
+                console.warn(`Element with ID content-${deletedContentId} not found.`);
+            }
+            });
+        socket.on('disconnect', function () {
+            console.log('Disconnected from server');
+        });
+
+      document.addEventListener('DOMContentLoaded', function() {
+        // 监听表单提交事件
+        document.getElementById('contentForm').addEventListener('submit', function(event) {
+            event.preventDefault(); // 阻止默认提交行为
+
+            // 提交表单
+            fetch('{{ url_for("home") }}', {
+                method: 'POST',
+                body: new FormData(document.getElementById('contentForm'))
+            })
+            .then(response => {
+                if (response.ok) {
+                    // 提交成功后清空文本框内容
+                    document.getElementById('contentTextarea').value = '';
+                    console.log('Form submitted successfully.');
+                } else {
+                    console.error('Form submission failed.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    });
+
+
     </script>
 </body>
 </html>
