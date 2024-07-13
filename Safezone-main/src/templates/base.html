@@ -117,124 +117,122 @@
         </div>
     </div>
 
-    <!-- JavaScript to handle modal content and deletion -->
+  <!-- 引入 SocketIO 客户端库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <!-- JavaScript to handle modal content, deletion and real-time updates -->
     <script>
-        let isPageClosing = false;
+   document.addEventListener('DOMContentLoaded', function() {
+    const socket = io();
 
-        document.addEventListener('DOMContentLoaded', function () {
-            // 如果用户在登录页面，并且会话中有用户名，则发送注销请求
-            if (window.location.pathname === '/login' && '{{ session.get("username") }}') {
-                fetch('/api/logout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                }).then(response => {
-                    if (response.status === 204) {
-                        console.log('Successfully logged out due to navigation to login page.');
-                    }
-                }).catch(error => {
-                    console.error('Error logging out:', error);
-                });
-            }
+    socket.on('connect', function() {
+        console.log('Connected to server');
+    });
 
-            $('#contentModal').on('show.bs.modal', function (event) {
-                var button = $(event.relatedTarget);
-                var content = button.data('content');
-                var modal = $(this);
-                modal.find('.modal-body #modalContent').text(content);
-            });
+    socket.on('new_content', function(data) {
+        console.log('New content received:', data);
+        const contentList = document.getElementById('contentList');
 
-            // 确保分页按钮不触发注销请求
-            document.querySelectorAll('.pagination .page-link').forEach(button => {
-                button.addEventListener('click', function (event) {
-                    event.preventDefault();
-                    window.location.href = this.href;
-                });
-            });
+        if (window.currentPage === 1) {  // Only update if on the first page
+            const newContent = document.createElement('div');
+            newContent.className = 'card mb-2 flex-grow-1 history-card';
+            newContent.id = `content-${data.id}`;
+            newContent.innerHTML = `
+                <div class="card-body d-flex justify-content-between">
+                    <p class="card-text">${data.text.slice(0, 100)}...</p>
+                    <button class="btn btn-danger btn-sm" onclick="deleteContent(${data.id})">删除</button>
+                </div>
+            `;
+            contentList.prepend(newContent);  // 将新内容插入到列表顶部
+        }
+    });
 
-            // 处理注销链接点击事件
-            document.getElementById('logout-link').addEventListener('click', function (event) {
-                event.preventDefault();
-                fetch(this.href, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                })
-                    .then(response => {
-                        if (response.status === 204) {
-                            window.location.href = '/login';
-                        } else {
-                            alert('Logout failed.');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                    });
-            });
-
-            // 检测页面关闭事件
-            window.addEventListener('beforeunload', function (e) {
-                if (!isPageClosing) {
-                    var currentOrigin = window.location.origin;
-                    var newOrigin = document.activeElement && document.activeElement.href ? new URL(document.activeElement.href).origin : null;
-
-                    if (!newOrigin || currentOrigin !== newOrigin) {
-                        navigator.sendBeacon('/api/logout');
-                    }
-                }
-            });
-        });
-
-        function deleteContent(contentId) {
-            console.log(`Attempting to delete content with ID: ${contentId}`);
-
-            isPageClosing = true; // 标记页面正在关闭以执行删除操作
-
-            fetch(`/delete_content/${contentId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-                .then(response => {
-                    if (response.status === 200) {
-                        console.log(`Content with ID ${contentId} deleted successfully.`);
-                        location.reload();
-                    } else {
-                        console.log(`Failed to delete content with ID ${contentId}.`);
-                        alert('Failed to delete content.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                })
-                .finally(() => {
-                    isPageClosing = false; // 重置标记
-                });
+    socket.on('delete_content', function(data) {
+        console.log(`Deleting content with ID ${data.id}`);
+        var deletedContentId = data.id;
+        var deletedElement = document.getElementById(`content-${deletedContentId}`);
+        if (deletedElement) {
+            deletedElement.remove();
+            console.log(`Element with ID content-${deletedContentId} deleted successfully.`);
+        } else {
+            console.warn(`Element with ID content-${deletedContentId} not found.`);
         }
 
-        <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
-    <script>
-        var socket = io();
-        socket.on('connect', function () {
-            console.log('Connected to server');
+        // 更新页面内容和分页链接
+        const contentList = document.getElementById('contentList');
+        contentList.innerHTML = '';  // 清空内容列表
+
+        data.contents.forEach(content => {
+            const newContent = document.createElement('div');
+            newContent.className = 'card mb-2 flex-grow-1 history-card';
+            newContent.id = `content-${content.id}`;
+            newContent.innerHTML = `
+                <div class="card-body d-flex justify-content-between">
+                    <p class="card-text">${content.text}...</p>
+                    <button class="btn btn-danger btn-sm" onclick="deleteContent(${content.id})">删除</button>
+                </div>
+            `;
+            contentList.appendChild(newContent);
         });
-        socket.on('delete_content', function(data) {
-            console.log(`Deleting content with ID ${data.id}`);
-            var deletedContentId = data.id;
-            var deletedElement = document.getElementById(`content-${deletedContentId}`);
-            if (deletedElement) {
-                deletedElement.remove();
-                console.log(`Element with ID content-${deletedContentId} deleted successfully.`);
-            } else {
-                console.warn(`Element with ID content-${deletedContentId} not found.`);
+
+        const pagination = document.querySelector('.pagination');
+        pagination.innerHTML = '';  // 清空分页链接
+
+        if (data.has_prev) {
+            const prevPageLink = document.createElement('li');
+            prevPageLink.className = 'page-item';
+            prevPageLink.innerHTML = `<a class="page-link" href="#" onclick="loadPage(${data.page - 1})">Previous</a>`;
+            pagination.appendChild(prevPageLink);
+        }
+        if (data.has_next) {
+            const nextPageLink = document.createElement('li');
+            nextPageLink.className = 'page-item';
+            nextPageLink.innerHTML = `<a class="page-link" href="#" onclick="loadPage(${data.page + 1})">Next</a>`;
+            pagination.appendChild(nextPageLink);
+        }
+    });
+
+    socket.on('disconnect', function () {
+        console.log('Disconnected from server');
+    });
+
+    // 添加一个全局变量用于存储当前页码
+    window.currentPage = {{ page }};
+
+    window.deleteContent = function(contentId) {
+        console.log(`Attempting to delete content with ID: ${contentId}`);
+        fetch(`/delete_content/${contentId}?page=${window.currentPage}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
             }
-            });
-        socket.on('disconnect', function () {
-            console.log('Disconnected from server');
+        })
+        .then(response => {
+            if (response.status === 200) {
+                console.log(`Content with ID ${contentId} deleted successfully.`);
+            } else {
+                console.log(`Failed to delete content with ID ${contentId}.`);
+                alert('Failed to delete content.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
         });
+    };
+   {#不用socket的更新页码的办法#}
+   /* window.loadPage = function(page) {
+        fetch(`/home?page=${page}`)
+            .then(response => response.text())
+            .then(html => {
+                document.open();
+                document.write(html);
+                document.close();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    };*/
+});
+
     </script>
 
 
