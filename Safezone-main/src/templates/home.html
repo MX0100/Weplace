@@ -1,16 +1,22 @@
-
+{% extends "base.html" %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>{% block title %}Home{% endblock %}</title>
-    <!-- 引入Bootstrap CSS -->
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
     <style>
-        /* 设置历史记录卡片的高度，减去顶部导航条的高度 */
         .history-card {
-            height: calc((100vh - 56px) / 6); /* 减去顶部导航条的高度 */
+            height: calc((100vh - 56px) / 6);
+            position: relative; /* 使子元素可以定位 */
+        }
+        .date-published {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 0.8em;
+            color: gray;
         }
     </style>
 </head>
@@ -37,9 +43,7 @@
             </ul>
         </div>
     </nav>
-    <!-- 主内容容器 -->
     <div class="container mt-4">
-        <!-- 显示闪现消息 -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -47,16 +51,13 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        <!-- 内容块 -->
         {% block content %}
         <div class="container" style="height: 100vh;">
             <div class="row h-100">
-                <!-- 左侧文本框 -->
                 <div class="col-md-6 d-flex align-items-center">
                     <div class="card w-100 main-textbox">
                         <div class="card-header">Main Textbox</div>
                         <div class="card-body">
-                            <!-- 表单，用于提交新内容 -->
                             <form id="contentForm" method="POST" action="{{ url_for('home') }}">
                                 {{ form.hidden_tag() }}
                                 <div class="form-group">
@@ -71,18 +72,18 @@
                     </div>
                 </div>
 
-                <!-- 右侧历史信息 -->
                 <div class="col-md-6 d-flex flex-column overflow-auto" style="height: 100vh;" id="contentList">
                     {% for content in contents %}
-                        <!-- 历史记录卡片 -->
                         <div class="card mb-2 flex-grow-1 history-card" id="content-{{ content.id }}">
                             <div class="card-body d-flex justify-content-between">
-                                <p class="card-text">{{ content.text[:100] }}...</p> <!-- 显示前100个字符 -->
+                                <div>
+                                    <p class="card-text">{{ content.text[:100] }}...</p>
+                                    <small class="date-published">Published on {{ content.date_published.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                                </div>
                                 <button class="btn btn-danger btn-sm" onclick="deleteContent({{ content.id }})">删除</button>
                             </div>
                         </div>
                     {% endfor %}
-                    <!-- 分页链接 -->
                     <nav>
                         <ul class="pagination justify-content-center">
                             {% if has_prev %}
@@ -98,7 +99,6 @@
         </div>
         {% endblock %}
     </div>
-    <!-- 模态框，用于显示完整的历史记录内容 -->
     <div class="modal fade" id="contentModal" tabindex="-1" role="dialog" aria-labelledby="contentModalLabel" aria-hidden="true">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
@@ -118,152 +118,29 @@
         </div>
     </div>
 
-    <!-- 引入 SocketIO 客户端库 -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
-    <!-- JavaScript to handle modal content, deletion and real-time updates -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const socket = io();
+        const socket = io();
 
-            socket.on('connect', function() {
-                console.log('Connected to server');
-            });
-
-            socket.on('new_content', function(data) {
-                console.log('New content received:', data);
-                const contentList = document.getElementById('contentList');
-                const newContent = document.createElement('div');
-                newContent.className = 'card mb-2 flex-grow-1 history-card';
-                newContent.id = `content-${data.id}`;
-                newContent.innerHTML = `
-                    <div class="card-body d-flex justify-content-between">
+        socket.on('new_content', function(data) {
+            const contentList = document.getElementById('contentList');
+            const newContent = document.createElement('div');
+            newContent.className = 'card mb-2 flex-grow-1 history-card';
+            newContent.id = `content-${data.id}`;
+            newContent.innerHTML = `
+                <div class="card-body d-flex justify-content-between">
+                    <div>
                         <p class="card-text">${data.text.slice(0, 100)}...</p>
-                        <button class="btn btn-danger btn-sm" onclick="deleteContent(${data.id})">删除</button>
+                        <small class="date-published">Published on ${data.date_published}</small>
                     </div>
-                `;
-                contentList.prepend(newContent); // 将新内容插入到列表顶部
-            });
-
-            $('#contentModal').on('show.bs.modal', function (event) {
-                var button = $(event.relatedTarget);
-                var content = button.data('content');
-                var modal = $(this);
-                modal.find('.modal-body #modalContent').text(content);
-            });
-
-            // 确保分页按钮不触发注销请求
-            document.querySelectorAll('.pagination .page-link').forEach(button => {
-                button.addEventListener('click', function(event) {
-                    event.preventDefault();
-                    window.location.href = this.href;
-                });
-            });
-
-            // 确保注销按钮只触发注销请求
-            document.getElementById('logout-form').addEventListener('submit', function(event) {
-                event.preventDefault();
-                fetch(this.action, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                })
-                .then(response => {
-                    if (response.status === 204) {
-                        window.location.href = '/login';
-                    } else {
-                        alert('Logout failed.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
-            });
-            // 检测页面关闭事件
-            window.addEventListener('beforeunload', function (e) {
-                var currentOrigin = window.location.origin;
-                var newOrigin = document.activeElement && document.activeElement.href ? new URL(document.activeElement.href).origin : null;
-
-                if (!newOrigin || currentOrigin !== newOrigin) {
-                    navigator.sendBeacon('/api/logout');
-                }
-            });
-
-            // 监听textarea的回车事件
-            document.getElementById('contentTextarea').addEventListener('keydown', function (event) {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    document.getElementById('contentForm').submit();
-                }
-            });
+                    <button class="btn btn-danger btn-sm" onclick="deleteContent(${data.id})">删除</button>
+                </div>
+            `;
+            contentList.prepend(newContent);
         });
-
-        function deleteContent(contentId) {
-            console.log(`Attempting to delete content with ID: ${contentId}`);
-            fetch(`/delete_content/${contentId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(response => {
-                if (response.status === 200) {
-                    console.log(`Content with ID ${contentId} deleted successfully.`);
-                    document.getElementById(`content-${contentId}`).remove();
-                } else {
-                    console.log(`Failed to delete content with ID ${contentId}.`);
-                    alert('Failed to delete content.');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            });
-        }
-        var socket = io();
-        socket.on('connect', function () {
-            console.log('Connected to server');
-        });
-        socket.on('delete_content', function(data) {
-            console.log(`Deleting content with ID ${data.id}`);
-            var deletedContentId = data.id;
-            var deletedElement = document.getElementById(`content-${deletedContentId}`);
-            if (deletedElement) {
-                deletedElement.remove();
-                console.log(`Element with ID content-${deletedContentId} deleted successfully.`);
-            } else {
-                console.warn(`Element with ID content-${deletedContentId} not found.`);
-            }
-            });
-        socket.on('disconnect', function () {
-            console.log('Disconnected from server');
-        });
-
-      document.addEventListener('DOMContentLoaded', function() {
-        // 监听表单提交事件
-        document.getElementById('contentForm').addEventListener('submit', function(event) {
-            event.preventDefault(); // 阻止默认提交行为
-
-            // 提交表单
-            fetch('{{ url_for("home") }}', {
-                method: 'POST',
-                body: new FormData(document.getElementById('contentForm'))
-            })
-            .then(response => {
-                if (response.ok) {
-                    // 提交成功后清空文本框内容
-                    document.getElementById('contentTextarea').value = '';
-                    console.log('Form submitted successfully.');
-                } else {
-                    console.error('Form submission failed.');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            });
-        });
-    });
-
-
     </script>
 </body>
 </html>

@@ -7,6 +7,7 @@ from flask_socketio import SocketIO, emit
 from datetime import datetime, timedelta
 import os
 import socket
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from models import db, User, Content, UserSession
 
@@ -22,10 +23,12 @@ socketio = SocketIO(app)
 # 导入表单和模型
 from forms import LoginForm, RegistrationForm, ContentForm
 
+
 @app.before_request
 def create_tables():
     with app.app_context():
         db.create_all()
+
 
 def validate_session():
     session_token = session.get('session_token') or request.args.get('session_token')
@@ -46,6 +49,12 @@ def validate_session():
         return False
 
     return True
+
+
+print(f"SECRET_KEY: {app.config['SECRET_KEY']}")
+print(f"SQLALCHEMY_DATABASE_URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
+print(f"SESSION_FILE_DIR: {app.config['SESSION_FILE_DIR']}")
+
 
 @app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
@@ -71,6 +80,7 @@ def login():
             flash('Login Unsuccessful. Please check username and password', 'danger')
     return render_template('login.html', form=form)
 
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegistrationForm()
@@ -86,6 +96,7 @@ def register():
             return redirect(url_for('login'))
     return render_template('register.html', form=form)
 
+
 @app.route('/home', methods=['GET', 'POST'])
 @login_required
 def home():
@@ -95,21 +106,27 @@ def home():
 
     form = ContentForm()
     if form.validate_on_submit():
-        content = Content(text=form.text.data)
-        db.session.add(content)
+        new_content = Content(text=form.text.data, date_published=datetime.utcnow())
+        db.session.add(new_content)
         db.session.commit()
-        socketio.emit('new_content', {'text': content.text, 'id': content.id})
+        socketio.emit('new_content', {
+            'text': new_content.text,
+            'id': new_content.id,
+            'date_published': new_content.date_published.strftime('%Y-%m-%d %H:%M:%S')
+        })
         flash('Content saved successfully!', 'success')
+        return redirect(url_for('home'))
 
     # 分页
     page = request.args.get('page', 1, type=int)
     per_page = 6  # 每页显示的条数
-    pagination = Content.query.order_by(Content.id.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    pagination = Content.query.order_by(Content.date_published.desc()).paginate(page=page, per_page=per_page, error_out=False)
     contents = pagination.items
     has_next = pagination.has_next
     has_prev = pagination.has_prev  # 添加上一页的检查
 
     return render_template('home.html', form=form, contents=contents, page=page, has_next=has_next, has_prev=has_prev)
+
 
 @app.route('/delete_content/<int:content_id>', methods=['DELETE'])
 @login_required
@@ -119,13 +136,32 @@ def delete_content(content_id):
         content = db.session.merge(content)  # 确保对象在当前会话中
         db.session.delete(content)
         db.session.commit()
-        socketio.emit('delete_content', {'id': content_id}, namespace='/')
+
+        # 重新计算分页数据
+        page = request.args.get('page', 1, type=int)
+        per_page = 6  # 每页显示的条数
+        pagination = Content.query.order_by(Content.date_published.desc()).paginate(page=page, per_page=per_page, error_out=False)
+        contents = pagination.items
+        has_next = pagination.has_next
+        has_prev = pagination.has_prev
+
+        # 通过 Socket 通知客户端
+        socketio.emit('delete_content', {
+            'id': content_id,
+            'page': page,
+            'contents': [{'id': c.id, 'text': c.text[:100]} for c in contents],
+            'has_next': has_next,
+            'has_prev': has_prev
+        }, namespace='/')
         print(f"Broadcasting delete_content event for content ID {content_id}")
+
         return jsonify({'message': 'Content deleted successfully'}), 200
     except Exception as e:
         db.session.rollback()
         print(f"Error deleting content: {e}")
         return jsonify({'result': 'failure', 'error': str(e)}), 500
+
+
 
 @app.route('/logout')
 @login_required
@@ -155,10 +191,12 @@ def api_logout():
     session.pop('session_token', None)
     return '', 204
 
+
 # SocketIO事件处理程序
 @socketio.on('connect')
 def handle_connect():
     print('Client connected:', request.sid)
+
 
 @socketio.on('delete_content')
 def handle_delete_content(content_id):
@@ -177,9 +215,12 @@ def handle_delete_content(content_id):
         db.session.rollback()
         print(f"Error deleting content: {e}")
         emit('delete_content_failed', {'error': str(e)})  # 发送删除失败的事件给客户端
+
+
 @socketio.on('disconnect')
 def handle_disconnect():
     print('Client disconnected:', request.sid)
+
 
 if __name__ == '__main__':
     # 获取本机IP地址

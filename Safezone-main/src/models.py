@@ -14,6 +14,7 @@ class User(db.Model):
 class Content(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.Text, nullable=False)
+    date_published = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class UserSession(db.Model):
